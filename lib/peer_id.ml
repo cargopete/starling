@@ -8,15 +8,18 @@ type t = string
    length-delimited bytes (wire type 2, tag 0x12). *)
 let marshal_ed25519_pubkey raw =
   let buf = Buffer.create (4 + String.length raw) in
-  Buffer.add_char buf '\x08';
-  (* tag: field 1, varint *)
-  Buffer.add_char buf '\x01';
+  Pbuf.varint_field buf 1 1;
   (* KeyType.Ed25519 = 1 *)
-  Buffer.add_char buf '\x12';
-  (* tag: field 2, length-delimited *)
-  Varint.write buf (String.length raw);
-  Buffer.add_string buf raw;
+  Pbuf.bytes_field buf 2 raw;
   Buffer.contents buf
+
+let ed25519_raw_of_proto s =
+  match Pbuf.fields s with
+  | exception _ -> None
+  | fs -> (
+    match (Pbuf.find_varint 1 fs, Pbuf.find_bytes 2 fs) with
+    | Some 1, Some raw when String.length raw = 32 -> Some raw
+    | _ -> None)
 
 (* Per spec: serialized keys <= 42 bytes use the identity multihash so the key
    is recoverable from the Peer ID; larger keys (RSA) use sha2-256. *)

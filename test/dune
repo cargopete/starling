@@ -9,3 +9,7 @@
 (test
  (name test_noise)
  (libraries starling alcotest hex mirage-crypto))
+
+(test
+ (name test_noise_handshake)
+ (libraries starling alcotest hex eio eio.unix eio_main mirage-crypto-rng.unix))

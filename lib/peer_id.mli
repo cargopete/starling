@@ -15,6 +15,10 @@ val marshal_ed25519_pubkey : string -> string
 (** [of_ed25519_pubkey raw] is the Peer ID for a 32-byte raw Ed25519 public key. *)
 val of_ed25519_pubkey : string -> t
 
+(** [ed25519_raw_of_proto bytes] extracts the 32-byte raw Ed25519 key from a
+    marshalled [PublicKey] protobuf, if it is a well-formed Ed25519 key. *)
+val ed25519_raw_of_proto : string -> string option
+
 (** The underlying multihash. *)
 val to_multihash : t -> Multihash.t
 

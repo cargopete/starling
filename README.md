@@ -28,19 +28,30 @@ exchange one 32-byte ping echo, and run Identify. (No TLS, mplex, or QUIC in the
 
 ## Status
 
-**Phases 0–1 complete** (17 tests green). Foundation + connectivity:
+**Phases 0–2 complete** (25 tests green). Identity, connectivity, and a working
+encrypted+authenticated channel:
 
 - ✅ `Varint` — unsigned-varint (LEB128), with spec vectors
 - ✅ `Base58` — base58btc, anchored on the `"Hello World!" → 2NEpo7TZRRrLZSi2U` vector
 - ✅ `Multihash` — identity + sha2-256
 - ✅ `Multiaddr` — `/ip4` `/ip6` `/tcp` `/p2p`, string ↔ binary
-- ✅ `Keys` — Ed25519 keypairs (mirage-crypto-ec)
-- ✅ `Peer_id` — `PublicKey` protobuf → identity multihash → base58btc
+- ✅ `Keys` / `Peer_id` — Ed25519 → `PublicKey` protobuf → identity multihash → base58btc
 - ✅ `Transport` — Eio TCP dial (multiaddr → socket)
-- ✅ `Multistream` — multistream-select 1.0.0 (framing, propose/accept/`na`),
-  tested over Eio socketpairs and real loopback TCP
+- ✅ `Multistream` — multistream-select 1.0.0, tested over socketpairs and real TCP
+- ✅ **Noise XX** (`Noise_XX_25519_ChaChaPoly_SHA256`) — hand-rolled on mirage-crypto:
+  - `Noise_cipher_state` (ChaCha20-Poly1305, 12-byte IETF nonce) — verified vs the
+    **RFC 8439** AEAD vector
+  - `Noise_hkdf`, `Noise_symmetric_state` (CipherState / key schedule / split)
+  - `Noise_handshake` — the XX state machine (`-> e` / `<- e,ee,s,es` / `-> s,se`)
+  - `Noise` — the Eio driver: full handshake, `NoiseHandshakePayload`, static-key
+    signature, mutual **Peer-ID authentication**, 2-byte-BE transport framing
+  - tested end-to-end over a real Eio socket pair (both peers authenticate, channel
+    bindings agree, transport encrypts both directions)
 
-**Next:** Phase 2 — Noise XX (the hard part). See [`ROADMAP.md`](ROADMAP.md).
+`starling dial <multiaddr>` negotiates `/noise` and runs the handshake, printing the
+remote Peer ID. (Live go-libp2p interop is the one remaining Phase 2 check — needs Go.)
+
+**Next:** Phase 3 — Yamux stream multiplexing. See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick start
 

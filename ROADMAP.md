@@ -35,15 +35,18 @@ Sitting 1 — pure primitives ✅ (done):
 - [x] `Noise_symmetric_state` — initialize / mix_hash / mix_key / encrypt_and_hash /
       decrypt_and_hash / split. Two-party round-trip + transport split verified.
 
-Sitting 2 — the live handshake (next):
-- [ ] `Noise_dh` — X25519 wrapper (gen ephemeral, load static, DH)
-- [ ] XX message state machine (`-> e` / `<- e,ee,s,es` / `-> s,se`)
-- [ ] `NoiseHandshakePayload` proto2 (ocaml-protoc-plugin); static-key signature
-      over `"noise-libp2p-static-key:" || static_pub`; Peer ID verification
-- [ ] Noise transport framing (`<2-byte BE len><msg>`) over the Eio flow
-- [ ] Milestone: full XX vs local go-libp2p; decrypt both directions. Top debug
-      checks: nonce mode, AAD = `h`, signature bytes. (Anchor on a published XX
-      test vector for a deterministic offline check first.)
+Sitting 2 — the live handshake ✅ (done):
+- [x] `Noise_dh` — X25519 wrapper (gen ephemeral, load static, DH)
+- [x] `Pbuf` — minimal proto2 helper; `Noise_payload` (`NoiseHandshakePayload`)
+- [x] `Noise_handshake` — XX state machine (`-> e` / `<- e,ee,s,es` / `-> s,se`),
+      pure step functions (deterministic, vector-ready)
+- [x] `Noise` driver — static-key signature over `"noise-libp2p-static-key:" ‖
+      static_pub`, mutual Peer-ID verification, 2-byte-BE transport framing over Eio
+- [x] Tests: in-memory fixed-key handshake + live handshake over a socket pair
+      (mutual auth, channel-binding agreement, bidirectional transport)
+- [x] `starling dial` runs `/noise` + handshake and prints the remote Peer ID
+- [ ] _Manual milestone:_ full XX vs a real go-libp2p node (needs Go). Optional:
+      pin a published XX test vector for a stricter offline wire check.
 
 ## Phase 3 — Yamux
 

@@ -1,0 +1,4 @@
+(executable
+ (name starling)
+ (public_name starling)
+ (libraries starling hex))

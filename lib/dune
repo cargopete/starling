@@ -1,0 +1,4 @@
+(library
+ (name starling)
+ (public_name starling)
+ (libraries digestif ipaddr mirage-crypto-ec mirage-crypto-rng))

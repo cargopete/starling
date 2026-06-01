@@ -12,91 +12,86 @@ A **native [libp2p](https://libp2p.io) node in OCaml** — built from scratch on
 As of mid-2026 there is **no native OCaml libp2p**. The only OCaml/libp2p contact
 points are Mina's out-of-process Go `libp2p_helper` and a stalled 2019 proposal to
 wrap Go via C. The ecosystem now has every primitive needed — Eio for IO,
-mirage-crypto for X25519/ChaCha20-Poly1305, digestif for SHA-256, ocaml-protoc-plugin
-for proto2 — so `starling` fills the gap natively. See
-[`docs/RFC-001-libp2p-ocaml.md`](docs/RFC-001-libp2p-ocaml.md) for the full spec.
-
-## MVP target
-
-```
-TCP → multistream-select 1.0.0 → Noise XX → Yamux → Identify + ping
-```
-
-**Done** = dial a real go-libp2p ping node, complete the
-`Noise_XX_25519_ChaChaPoly_SHA256` handshake, negotiate Yamux, open a stream,
-exchange one 32-byte ping echo, and run Identify. (No TLS, mplex, or QUIC in the MVP.)
+mirage-crypto for X25519/ChaCha20-Poly1305, digestif for SHA-256 — so `starling`
+fills the gap natively. See [`docs/RFC-001-libp2p-ocaml.md`](docs/RFC-001-libp2p-ocaml.md)
+for the full wire-format spec.
 
 ## Status
 
-**MVP complete** (Phases 0–4, 31 tests green). A working libp2p node:
-`starling listen` and `starling dial` hold a real conversation over TCP — mutual
-Peer-ID authentication, **ping (~1.6 ms RTT)**, and Identify exchange. The full
-stack, bottom to top:
+**MVP complete** — Phases 0–4, **31 tests green**. `starling` is a working libp2p
+node: two instances hold a real conversation over TCP, with mutual Peer-ID
+authentication, a **ping (~1.6 ms RTT)**, and an Identify exchange.
 
-- ✅ `Varint` — unsigned-varint (LEB128), with spec vectors
-- ✅ `Base58` — base58btc, anchored on the `"Hello World!" → 2NEpo7TZRRrLZSi2U` vector
-- ✅ `Multihash` — identity + sha2-256
-- ✅ `Multiaddr` — `/ip4` `/ip6` `/tcp` `/p2p`, string ↔ binary
-- ✅ `Keys` / `Peer_id` — Ed25519 → `PublicKey` protobuf → identity multihash → base58btc
-- ✅ `Transport` — Eio TCP dial (multiaddr → socket)
-- ✅ `Multistream` — multistream-select 1.0.0, tested over socketpairs and real TCP
-- ✅ **Noise XX** (`Noise_XX_25519_ChaChaPoly_SHA256`) — hand-rolled on mirage-crypto:
-  - `Noise_cipher_state` (ChaCha20-Poly1305, 12-byte IETF nonce) — verified vs the
-    **RFC 8439** AEAD vector
-  - `Noise_hkdf`, `Noise_symmetric_state` (CipherState / key schedule / split)
-  - `Noise_handshake` — the XX state machine (`-> e` / `<- e,ee,s,es` / `-> s,se`)
-  - `Noise` — the Eio driver: full handshake, `NoiseHandshakePayload`, static-key
-    signature, mutual **Peer-ID authentication**, 2-byte-BE transport framing
-  - tested end-to-end over a real Eio socket pair (both peers authenticate, channel
-    bindings agree, transport encrypts both directions)
-- ✅ `Secure_flow` — the Noise transport exposed as a custom `Eio.Flow.two_way`, so
-  every higher layer composes over it via `Buf_read`/`Buf_write`
-- ✅ **Yamux** (`/yamux/1.0.0`) — 12-byte frame codec, SYN/ACK/FIN/RST, 256 KiB
-  flow-control window, a daemon read-loop demuxing to per-stream queues; **streams are
-  themselves Eio flows**. Tested with a 100 KB chunked payload and the **full stack**
-  (Noise → Secure_flow → `/yamux` negotiation → stream round-trip).
+The MVP stack is `TCP → multistream-select 1.0.0 → Noise XX → Yamux → ping + Identify`
+(no TLS, mplex, or QUIC — those are deliberately out of scope). The one remaining
+"definition of done" is external interop against a real go-libp2p node, which only
+needs a Go toolchain to stand one up; every wire format is built to spec.
 
-- ✅ `Upgrade` / `Host` — the full TCP → Noise → `/yamux` upgrade and per-stream
-  protocol dispatch
-- ✅ **Ping** (`/ipfs/ping/1.0.0`) — 32-byte echo with RTT, dial + respond
-- ✅ **Identify** (`/ipfs/id/1.0.0`) — minimal respond + request, peer-id recovery
+## Try it
 
 ```sh
-# terminal 1
-dune exec starling -- listen 4001
-#   starling listening on /ip4/127.0.0.1/tcp/4001/p2p/12D3KooW...
+opam switch create . ocaml-base-compiler.5.2.0   # local switch (first time)
+opam install --deps-only .
+dune build
+dune runtest                                      # 31 tests, all green
+```
 
-# terminal 2
+Run two nodes and have them talk:
+
+```sh
+# terminal 1 — a node that serves ping + identify
+dune exec starling -- listen 4001
+#   starling listening on /ip4/127.0.0.1/tcp/4001/p2p/12D3KooWKCr...
+
+# terminal 2 — dial it, ping it, fetch its identify
 dune exec starling -- dial /ip4/127.0.0.1/tcp/4001
-#   established session with 12D3KooW...
+#   local peer: 12D3KooWGWZ...
+#   established session with 12D3KooWKCr...
 #   ping: 1.654 ms
 #   identify: agent=starling/0.1.0 protocols=[/ipfs/ping/1.0.0, /ipfs/id/1.0.0]
 ```
 
-**Next:** external interop against a real go-libp2p node (needs Go), then growth —
-Identify push, Kademlia DHT, GossipSub. See [`ROADMAP.md`](ROADMAP.md).
-
-## Quick start
+Other subcommands:
 
 ```sh
-opam switch create . ocaml-base-compiler.5.2.0   # local switch
-opam install --deps-only .
-dune build
-dune runtest          # 12 tests, all green
-dune exec starling    # prints a Peer ID
-# -> 12D3KooWK99VoVxNE7XzyBwXEzW7xhK7Gpv85r9F3V3fyKSUKPH5
-
-dune exec starling id <64-hex-seed>   # derive from your own Ed25519 seed
+dune exec starling                      # print a Peer ID from a dev seed
+dune exec starling -- id <64-hex-seed>  # derive a Peer ID from your own Ed25519 seed
 ```
+
+## The stack
+
+Each layer is hand-rolled and tested, with external vectors where it counts.
+
+| Layer | Module(s) | Notes |
+|---|---|---|
+| Multiformats | `Varint`, `Base58`, `Multihash`, `Multiaddr` | unsigned-varint; base58btc anchored on `"Hello World!" → 2NEpo7TZRRrLZSi2U`; `/ip4 /ip6 /tcp /p2p` |
+| Identity | `Keys`, `Peer_id` | Ed25519 → `PublicKey` protobuf → identity multihash → base58btc (`12D3Koo…`) |
+| Transport | `Transport` | Eio TCP dial (multiaddr → socket) |
+| Negotiation | `Multistream` | multistream-select 1.0.0 |
+| Security | `Noise_*`, `Noise` | hand-rolled `Noise_XX_25519_ChaChaPoly_SHA256`; AEAD verified vs **RFC 8439**; mutual Peer-ID auth |
+| Encrypted channel | `Secure_flow` | the Noise transport as a custom `Eio.Flow.two_way` — every higher layer composes over it |
+| Multiplexing | `Yamux` | 12-byte frames, SYN/ACK/FIN/RST, 256 KiB window, daemon read-loop; **streams are Eio flows** |
+| Upgrade & dispatch | `Upgrade`, `Host` | TCP → Noise → `/yamux`; per-stream protocol routing |
+| Protocols | `Ping`, `Identify` | `/ipfs/ping/1.0.0` (32-byte echo + RTT), `/ipfs/id/1.0.0` |
+
+Because the Noise channel and each Yamux stream are both ordinary `Eio.Flow.two_way`
+values, the same `Buf_read`/`Buf_write` and `Multistream` code composes at every
+level — the layering is literal, not just conceptual.
 
 ## Layout
 
 ```
 docs/   RFC-001 — the canonical wire-format spec
-lib/    the library (varint, base58, multihash, multiaddr, keys, peer_id, …)
-bin/    the starling CLI (grows into dial/listen)
-test/   Alcotest suite, anchored on external vectors per layer
+lib/    the library, one module per layer (see the table above)
+bin/    the starling CLI — id / listen / dial
+test/   Alcotest suites, anchored on external vectors per layer
 ```
+
+## What's next
+
+External interop against go-libp2p (then rust/nim), then growth protocols —
+Identify push, Kademlia DHT (`/ipfs/kad`), GossipSub (`/meshsub`). See
+[`ROADMAP.md`](ROADMAP.md).
 
 ## License
 

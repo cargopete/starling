@@ -82,8 +82,9 @@ XX:
   -> s, se
 ```
 SymmetricState (Noise spec rev. 34, §5):
-- **InitializeSymmetric**: protocol name is 31 ASCII bytes ≤ 32, so `h` = name
-  **right-padded with one 0x00** to 32 bytes (NOT hashed). `ck = h`; `k = empty`.
+- **InitializeSymmetric**: protocol name `Noise_XX_25519_ChaChaPoly_SHA256` is
+  **exactly 32 ASCII bytes**, so `h` = the name verbatim (≤ 32 ⇒ right-pad with
+  0x00 to 32; here no padding is needed). NOT hashed. `ck = h`; `k = empty`.
   Then `MixHash(prologue)` with empty prologue.
 - **MixHash(data)**: `h = SHA256(h || data)`.
 - **MixKey(ikm)**: `ck, temp_k = HKDF(ck, ikm, 2)`; `k = temp_k`, `n = 0`.

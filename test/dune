@@ -5,3 +5,7 @@
 (test
  (name test_multistream)
  (libraries starling alcotest eio eio.unix eio_main))
+
+(test
+ (name test_noise)
+ (libraries starling alcotest hex mirage-crypto))

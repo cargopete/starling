@@ -26,15 +26,24 @@ Full wire-format detail in [`docs/RFC-001-libp2p-ocaml.md`](docs/RFC-001-libp2p-
       `starling dial` exchanges `/multistream/1.0.0` and reads the `/noise`
       acceptance (handshake then fails — negotiation proven). Needs Go installed.
 
-## Phase 2 — Noise XX (the hard part)
+## Phase 2 — Noise XX (the hard part) — _in progress_
 
-- [ ] `Noise.Symmetric_state` / `Cipher_state` on mirage-crypto (X25519, ChaCha20
-      **12-byte IETF nonce**, digestif SHA-256, hand-rolled HKDF)
+Sitting 1 — pure primitives ✅ (done):
+- [x] `Noise_cipher_state` — ChaCha20-Poly1305, **12-byte IETF nonce**, pass-through
+      before first key. Verified against the **RFC 8439 §2.8.2** AEAD vector.
+- [x] `Noise_hkdf` — Noise §4.3 HMAC-SHA256 chain (hkdf2 / hkdf3)
+- [x] `Noise_symmetric_state` — initialize / mix_hash / mix_key / encrypt_and_hash /
+      decrypt_and_hash / split. Two-party round-trip + transport split verified.
+
+Sitting 2 — the live handshake (next):
+- [ ] `Noise_dh` — X25519 wrapper (gen ephemeral, load static, DH)
 - [ ] XX message state machine (`-> e` / `<- e,ee,s,es` / `-> s,se`)
 - [ ] `NoiseHandshakePayload` proto2 (ocaml-protoc-plugin); static-key signature
       over `"noise-libp2p-static-key:" || static_pub`; Peer ID verification
-- [ ] Milestone: pass Noise test vectors; complete XX vs local go-libp2p; decrypt
-      both directions. Top debug checks: nonce mode, AAD = `h`, signature bytes.
+- [ ] Noise transport framing (`<2-byte BE len><msg>`) over the Eio flow
+- [ ] Milestone: full XX vs local go-libp2p; decrypt both directions. Top debug
+      checks: nonce mode, AAD = `h`, signature bytes. (Anchor on a published XX
+      test vector for a deterministic offline check first.)
 
 ## Phase 3 — Yamux
 

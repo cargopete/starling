@@ -28,8 +28,8 @@ exchange one 32-byte ping echo, and run Identify. (No TLS, mplex, or QUIC in the
 
 ## Status
 
-**Phases 0–2 complete** (25 tests green). Identity, connectivity, and a working
-encrypted+authenticated channel:
+**Phases 0–3 complete** (30 tests green). Identity, connectivity, an encrypted +
+authenticated channel, and stream multiplexing — the whole connection stack:
 
 - ✅ `Varint` — unsigned-varint (LEB128), with spec vectors
 - ✅ `Base58` — base58btc, anchored on the `"Hello World!" → 2NEpo7TZRRrLZSi2U` vector
@@ -47,11 +47,19 @@ encrypted+authenticated channel:
     signature, mutual **Peer-ID authentication**, 2-byte-BE transport framing
   - tested end-to-end over a real Eio socket pair (both peers authenticate, channel
     bindings agree, transport encrypts both directions)
+- ✅ `Secure_flow` — the Noise transport exposed as a custom `Eio.Flow.two_way`, so
+  every higher layer composes over it via `Buf_read`/`Buf_write`
+- ✅ **Yamux** (`/yamux/1.0.0`) — 12-byte frame codec, SYN/ACK/FIN/RST, 256 KiB
+  flow-control window, a daemon read-loop demuxing to per-stream queues; **streams are
+  themselves Eio flows**. Tested with a 100 KB chunked payload and the **full stack**
+  (Noise → Secure_flow → `/yamux` negotiation → stream round-trip).
 
-`starling dial <multiaddr>` negotiates `/noise` and runs the handshake, printing the
-remote Peer ID. (Live go-libp2p interop is the one remaining Phase 2 check — needs Go.)
+`starling dial <multiaddr>` runs the whole client upgrade — TCP → `/noise` handshake
+→ `/yamux` — printing the remote Peer ID and bringing the muxer up. (Live go-libp2p
+interop is the remaining manual check — needs Go.)
 
-**Next:** Phase 3 — Yamux stream multiplexing. See [`ROADMAP.md`](ROADMAP.md).
+**Next:** Phase 4 — per-stream `multistream-select` dispatch + ping + Identify = MVP.
+See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick start
 

@@ -31,11 +31,19 @@ let dial addr =
   | Ok () -> (
     Printf.printf "negotiated /noise; starting handshake...\n%!";
     match Noise.run_initiator ~identity r w with
-    | Ok sess ->
-      Printf.printf "established Noise with %s\n" (Peer_id.to_string sess.remote_peer)
     | Error `Handshake_failed -> Printf.printf "noise handshake failed\n"
     | Error `Bad_payload -> Printf.printf "peer sent a malformed identity payload\n"
-    | Error `Bad_signature -> Printf.printf "peer identity signature did not verify\n")
+    | Error `Bad_signature -> Printf.printf "peer identity signature did not verify\n"
+    | Ok sess -> (
+      Printf.printf "established Noise with %s\n%!" (Peer_id.to_string sess.remote_peer);
+      let sf = Secure_flow.make r w sess in
+      Eio.Buf_write.with_flow sf @@ fun w2 ->
+      let r2 = Eio.Buf_read.of_flow sf ~max_size:1048576 in
+      match Multistream.dial r2 w2 ~proto:Yamux.protocol_id with
+      | Error _ -> Printf.printf "could not negotiate %s\n" Yamux.protocol_id
+      | Ok () ->
+        let _y = Yamux.create ~sw ~is_client:true r2 w2 in
+        Printf.printf "negotiated %s — muxer up\n" Yamux.protocol_id))
 
 let usage () =
   prerr_endline "usage: starling [id <hex-seed> | dial <multiaddr>]";

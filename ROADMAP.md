@@ -48,13 +48,20 @@ Sitting 2 — the live handshake ✅ (done):
 - [ ] _Manual milestone:_ full XX vs a real go-libp2p node (needs Go). Optional:
       pin a published XX test vector for a stricter offline wire check.
 
-## Phase 3 — Yamux
+## Phase 3 — Yamux ✅ (done)
 
-- [ ] 12-byte frame codec; SYN/ACK/FIN/RST; 256 KiB window + WindowUpdate
-      (accept larger peer windows)
-- [ ] Eio read-loop/demux fiber; `open_stream` / `accept_stream`
-- [ ] Milestone: negotiate `/yamux/1.0.0` over Noise vs go-libp2p; open a stream,
-      observe the ACK
+- [x] `Secure_flow` — the Noise transport as a custom `Eio.Flow.two_way` (so
+      `Buf_read`/`Buf_write`, `Multistream`, and `Yamux` compose over it)
+- [x] `Yamux` — 12-byte frame codec; SYN/ACK/FIN/RST; 256 KiB window + immediate
+      WindowUpdate replenish; daemon read-loop demuxing to per-stream queues
+- [x] Streams are themselves `Eio.Flow.two_way`; `open_stream` / `accept_stream`
+- [x] Tests: codec, plain stream exchange, 100 KB chunked+flow-controlled payload,
+      and the **full stack** (Noise → Secure_flow → `/yamux` negotiation → stream
+      round-trip over a socket pair)
+- [x] `starling dial` now runs Noise → `/yamux` and brings the muxer up
+- [ ] _Manual milestone:_ open a stream against a real go-libp2p node, observe the
+      ACK (needs Go). _Simplification to revisit: read-side replenishes immediately
+      (no backpressure); fine for the MVP._
 
 ## Phase 4 — ping + Identify = MVP DONE
 

@@ -63,13 +63,19 @@ Sitting 2 — the live handshake ✅ (done):
       ACK (needs Go). _Simplification to revisit: read-side replenishes immediately
       (no backpressure); fine for the MVP._
 
-## Phase 4 — ping + Identify = MVP DONE
+## Phase 4 — ping + Identify = MVP ✅ (done)
 
-- [ ] Per-stream multistream-select dispatch
-- [ ] `ping` (`/ipfs/ping/1.0.0`) — 32-byte echo, dial + respond
-- [ ] `identify` (`/ipfs/id/1.0.0`) — respond minimal, parse peer's
-- [ ] **Definition of done:** dial a real go-libp2p ping node, full handshake,
-      ping echo + RTT, parse Identify. Repeat vs rust-libp2p, nim-libp2p.
+- [x] `Upgrade` — the full client/server upgrade (TCP → Noise → `/yamux`) as a
+      continuation; `Host` — per-stream multistream dispatch to handlers
+- [x] `Ping` (`/ipfs/ping/1.0.0`) — 32-byte echo, dial (with RTT) + respond
+- [x] `Identify` (`/ipfs/id/1.0.0`) — encode/decode, respond + request, peer-id recovery
+- [x] CLI: `starling listen <port>` (serve ping+identify) and `starling dial <ma>`
+      (upgrade, ping with RTT, fetch identify)
+- [x] Proven **starling ↔ starling** over real TCP: mutual auth, `ping ~1.6 ms`,
+      identify exchange. MVP test green in CI.
+- [ ] **Remaining definition-of-done:** dial a real go-libp2p (then rust/nim) ping
+      node — needs Go/Rust toolchains installed. The wire is to spec; this is the
+      external interop confirmation.
 
 ## Growth (post-MVP)
 

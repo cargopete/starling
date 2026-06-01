@@ -17,3 +17,7 @@
 (test
  (name test_yamux)
  (libraries starling alcotest hex eio eio.unix eio_main mirage-crypto-rng.unix))
+
+(test
+ (name test_mvp)
+ (libraries starling alcotest hex eio eio.unix eio_main mirage-crypto-rng.unix))

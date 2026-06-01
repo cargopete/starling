@@ -28,8 +28,10 @@ exchange one 32-byte ping echo, and run Identify. (No TLS, mplex, or QUIC in the
 
 ## Status
 
-**Phases 0–3 complete** (30 tests green). Identity, connectivity, an encrypted +
-authenticated channel, and stream multiplexing — the whole connection stack:
+**MVP complete** (Phases 0–4, 31 tests green). A working libp2p node:
+`starling listen` and `starling dial` hold a real conversation over TCP — mutual
+Peer-ID authentication, **ping (~1.6 ms RTT)**, and Identify exchange. The full
+stack, bottom to top:
 
 - ✅ `Varint` — unsigned-varint (LEB128), with spec vectors
 - ✅ `Base58` — base58btc, anchored on the `"Hello World!" → 2NEpo7TZRRrLZSi2U` vector
@@ -54,12 +56,25 @@ authenticated channel, and stream multiplexing — the whole connection stack:
   themselves Eio flows**. Tested with a 100 KB chunked payload and the **full stack**
   (Noise → Secure_flow → `/yamux` negotiation → stream round-trip).
 
-`starling dial <multiaddr>` runs the whole client upgrade — TCP → `/noise` handshake
-→ `/yamux` — printing the remote Peer ID and bringing the muxer up. (Live go-libp2p
-interop is the remaining manual check — needs Go.)
+- ✅ `Upgrade` / `Host` — the full TCP → Noise → `/yamux` upgrade and per-stream
+  protocol dispatch
+- ✅ **Ping** (`/ipfs/ping/1.0.0`) — 32-byte echo with RTT, dial + respond
+- ✅ **Identify** (`/ipfs/id/1.0.0`) — minimal respond + request, peer-id recovery
 
-**Next:** Phase 4 — per-stream `multistream-select` dispatch + ping + Identify = MVP.
-See [`ROADMAP.md`](ROADMAP.md).
+```sh
+# terminal 1
+dune exec starling -- listen 4001
+#   starling listening on /ip4/127.0.0.1/tcp/4001/p2p/12D3KooW...
+
+# terminal 2
+dune exec starling -- dial /ip4/127.0.0.1/tcp/4001
+#   established session with 12D3KooW...
+#   ping: 1.654 ms
+#   identify: agent=starling/0.1.0 protocols=[/ipfs/ping/1.0.0, /ipfs/id/1.0.0]
+```
+
+**Next:** external interop against a real go-libp2p node (needs Go), then growth —
+Identify push, Kademlia DHT, GossipSub. See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick start
 

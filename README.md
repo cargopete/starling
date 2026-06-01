@@ -28,8 +28,7 @@ exchange one 32-byte ping echo, and run Identify. (No TLS, mplex, or QUIC in the
 
 ## Status
 
-**Phase 0 — multiformats & identity — complete.** The byte-level foundation is
-built and tested:
+**Phases 0–1 complete** (17 tests green). Foundation + connectivity:
 
 - ✅ `Varint` — unsigned-varint (LEB128), with spec vectors
 - ✅ `Base58` — base58btc, anchored on the `"Hello World!" → 2NEpo7TZRRrLZSi2U` vector
@@ -37,8 +36,11 @@ built and tested:
 - ✅ `Multiaddr` — `/ip4` `/ip6` `/tcp` `/p2p`, string ↔ binary
 - ✅ `Keys` — Ed25519 keypairs (mirage-crypto-ec)
 - ✅ `Peer_id` — `PublicKey` protobuf → identity multihash → base58btc
+- ✅ `Transport` — Eio TCP dial (multiaddr → socket)
+- ✅ `Multistream` — multistream-select 1.0.0 (framing, propose/accept/`na`),
+  tested over Eio socketpairs and real loopback TCP
 
-See [`ROADMAP.md`](ROADMAP.md) for the phase plan.
+**Next:** Phase 2 — Noise XX (the hard part). See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick start
 

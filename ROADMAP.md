@@ -14,12 +14,17 @@ Full wire-format detail in [`docs/RFC-001-libp2p-ocaml.md`](docs/RFC-001-libp2p-
 - [x] Alcotest suite (12 tests), Peer ID renders `12D3Koo...`
 - [ ] _Follow-up:_ pin an external Ed25519 seed→PeerID vector from a reference impl
 
-## Phase 1 — TCP + multistream-select (next)
+## Phase 1 — TCP + multistream-select ✅ (done)
 
-- [ ] Eio TCP dial / listen (`Transport`)
-- [ ] `Multistream` — `<varint-len>msg\n` framing, header exchange, propose/`na`
-- [ ] Milestone: exchange `/multistream/1.0.0` with a local go-libp2p node; propose
-      `/noise`, read the acceptance (handshake then fails — negotiation proven)
+- [x] Eio TCP dial (`Transport.connect`) — multiaddr → loopback/real socket
+- [x] `Multistream` — `<varint-len>msg\n` framing, header exchange, propose/`na`,
+      dialer + listener
+- [x] Tests: negotiation success / second-choice / `na` / framing over Eio
+      socketpairs, plus an end-to-end self-dial over real loopback TCP
+- [x] `starling dial <multiaddr>` CLI subcommand (proposes `/noise`)
+- [ ] _Manual milestone:_ run a local go-libp2p ping node and confirm
+      `starling dial` exchanges `/multistream/1.0.0` and reads the `/noise`
+      acceptance (handshake then fails — negotiation proven). Needs Go installed.
 
 ## Phase 2 — Noise XX (the hard part)
 

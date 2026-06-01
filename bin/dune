@@ -1,4 +1,4 @@
 (executable
  (name starling)
  (public_name starling)
- (libraries starling hex))
+ (libraries starling hex eio eio_main))

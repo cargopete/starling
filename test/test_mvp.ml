@@ -54,7 +54,7 @@ let mvp_over_tcp () =
   Alcotest.(check bool) "round-trip time was measured" true (!rtt >= 0.0);
   Alcotest.(check string) "server authenticated the client"
     (Peer_id.to_string (Keys.peer_id client_id)) !seen_peer;
-  Alcotest.(check string) "identify agent version" "starling/0.1.0" !agent;
+  Alcotest.(check string) "identify agent version" "starling/0.2.0" !agent;
   Alcotest.(check string) "identify public key matches server peer id"
     (Peer_id.to_string (Keys.peer_id server_id)) !id_peer
 

@@ -2,7 +2,7 @@
    multistream-select on each, and route to the ping / identify handlers.
    No .mli — the stream argument is an Eio flow resource (see {!Transport}). *)
 
-let agent_version = "starling/0.1.0"
+let agent_version = "starling/0.2.0"
 let max_size = 1 lsl 16
 
 let supported = [ Ping.protocol_id; Identify.protocol_id ]

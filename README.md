@@ -49,7 +49,7 @@ dune exec starling -- dial /ip4/127.0.0.1/tcp/4001
 #   local peer: 12D3KooWGWZ...
 #   established session with 12D3KooWKCr...
 #   ping: 1.654 ms
-#   identify: agent=starling/0.1.0 protocols=[/ipfs/ping/1.0.0, /ipfs/id/1.0.0]
+#   identify: agent=starling/0.2.0 protocols=[/ipfs/ping/1.0.0, /ipfs/id/1.0.0]
 ```
 
 Both `listen` and `dial` use a **persistent host identity**: the Ed25519 seed is
@@ -88,11 +88,15 @@ level — the layering is literal, not just conceptual.
 ## Layout
 
 ```
-docs/   RFC-001 — the canonical wire-format spec
-lib/    the library, one module per layer (see the table above)
-bin/    the starling CLI — id / listen / dial
-test/   Alcotest suites, anchored on external vectors per layer
+docs/     RFC-001 — the canonical wire-format spec
+lib/      the library, one module per layer (see the table above)
+bin/      the starling CLI — id / listen / dial
+test/     Alcotest suites, anchored on external vectors per layer
+interop/  go-libp2p interop harness + the flynn/noise vector generator
 ```
+
+See also [`SECURITY.md`](SECURITY.md) for the crypto posture and [`ROADMAP.md`](ROADMAP.md)
+for the full phase-by-phase plan.
 
 ## What's next
 

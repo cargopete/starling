@@ -5,7 +5,7 @@
 
 type t = {
   protocol_version : string option;  (** field 5, e.g. "ipfs/0.1.0" *)
-  agent_version : string option;  (** field 6, e.g. "starling/0.1.0" *)
+  agent_version : string option;  (** field 6, e.g. "starling/0.2.0" *)
   public_key : string option;  (** field 1, marshalled [PublicKey] protobuf *)
   listen_addrs : string list;  (** field 2, binary multiaddrs *)
   protocols : string list;  (** field 3 *)

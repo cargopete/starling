@@ -52,9 +52,12 @@ let stream_exchange () =
               Eio.Buf_write.flush w)));
   Alcotest.(check string) "stream round-trip" "pong" !result
 
-(* A payload bigger than one frame / forcing window updates. *)
+(* A payload several times the 256 KiB window, so the send window is exhausted
+   and replenished many times: proves flow control cycles without deadlock and
+   keeps the bytes intact across window boundaries. *)
 let large_payload () =
-  let payload = String.init 100_000 (fun i -> Char.chr (i mod 251)) in
+  let size = 1_000_000 in
+  let payload = String.init size (fun i -> Char.chr (i mod 251)) in
   let got = ref "" in
   with_pair (fun ~sw:_ ~client ~server ->
       Eio.Fiber.both
@@ -65,10 +68,45 @@ let large_payload () =
               Eio.Buf_write.flush w))
         (fun () ->
           let s = Yamux.accept_stream server in
-          let r = Eio.Buf_read.of_flow s ~max_size:200_000 in
-          got := Eio.Buf_read.take 100_000 r));
-  Alcotest.(check int) "length" 100_000 (String.length !got);
+          let r = Eio.Buf_read.of_flow s ~max_size:(size + 1024) in
+          got := Eio.Buf_read.take size r));
+  Alcotest.(check int) "length" size (String.length !got);
   Alcotest.(check bool) "content intact" true (String.equal !got payload)
+
+(* Backpressure: a writer aiming past the 256 KiB window at a stream nobody is
+   reading must stall, not run to completion. With the old ack-on-arrival
+   behaviour the receiver replenished the window regardless of consumption, so
+   the writer would finish and this would fail. *)
+let backpressure_throttles_unread_writer () =
+  Eio_main.run @@ fun env ->
+  let clock = Eio.Stdenv.clock env in
+  Eio.Switch.run @@ fun sw ->
+  let a, b = Eio_unix.Net.socketpair_stream ~sw () in
+  Eio.Buf_write.with_flow a @@ fun wa ->
+  Eio.Buf_write.with_flow b @@ fun wb ->
+  let ra = Eio.Buf_read.of_flow a ~max_size:2_000_000 in
+  let rb = Eio.Buf_read.of_flow b ~max_size:2_000_000 in
+  let client = Yamux.create ~sw ~is_client:true ra wa in
+  let server = Yamux.create ~sw ~is_client:false rb wb in
+  let size = 600_000 in
+  let wrote_all = ref false in
+  Eio.Fiber.both
+    (fun () ->
+      let s = Yamux.open_stream client in
+      Eio.Buf_write.with_flow s (fun w ->
+          Eio.Buf_write.string w (String.make size 'x');
+          Eio.Buf_write.flush w);
+      wrote_all := true)
+    (fun () ->
+      let s = Yamux.accept_stream server in
+      (* hold off reading: the writer should be wedged at the window *)
+      Eio.Time.sleep clock 0.2;
+      Alcotest.(check bool) "writer is throttled while the reader holds off" false !wrote_all;
+      (* now drain everything, which replenishes the window and frees the writer *)
+      let r = Eio.Buf_read.of_flow s ~max_size:(size + 1024) in
+      let got = Eio.Buf_read.take size r in
+      Alcotest.(check int) "all bytes delivered once draining" size (String.length got));
+  Alcotest.(check bool) "writer completed after the reader drained" true !wrote_all
 
 (* ----------------------- the whole stack: Noise -> Secure_flow -> Yamux ---- *)
 
@@ -133,6 +171,8 @@ let () =
         [
           Alcotest.test_case "exchange" `Quick stream_exchange;
           Alcotest.test_case "large payload" `Quick large_payload;
+          Alcotest.test_case "backpressure throttles unread writer" `Quick
+            backpressure_throttles_unread_writer;
         ] );
       ("integration", [ Alcotest.test_case "noise + secure_flow + yamux" `Quick full_stack ]);
     ]

@@ -2,6 +2,11 @@ let protocol_id = "/yamux/1.0.0"
 let window_initial = 256 * 1024
 let max_frame_data = 16384
 
+(* Replenish the peer's send window once the application has consumed half the
+   window's worth of bytes — frequent enough to keep a fast reader fed, rare
+   enough not to flood the wire with tiny WindowUpdates. *)
+let ack_threshold = window_initial / 2
+
 (* Flags *)
 let f_syn = 0x1
 let f_ack = 0x2
@@ -74,6 +79,7 @@ type st = {
   id : int;
   mutable in_leftover : string;
   mutable in_pos : int;
+  mutable pending_ack : int;  (* bytes consumed by the app, not yet acked to the peer *)
   incoming : string option Eio.Stream.t;  (* None marks EOF *)
   mutable send_window : int;
   smutex : Eio.Mutex.t;
@@ -104,6 +110,7 @@ let new_stream session id =
     id;
     in_leftover = "";
     in_pos = 0;
+    pending_ack = 0;
     incoming = Eio.Stream.create 256;
     send_window = window_initial;
     smutex = Eio.Mutex.create ();
@@ -119,6 +126,14 @@ let rec stream_single_read st buf =
     let n = min (Cstruct.length buf) avail in
     Cstruct.blit_from_string st.in_leftover st.in_pos buf 0 n;
     st.in_pos <- st.in_pos + n;
+    (* Real backpressure: the peer's send window is replenished only as the
+       application drains data, so a slow reader throttles the sender instead
+       of letting [incoming] grow without bound. *)
+    st.pending_ack <- st.pending_ack + n;
+    if st.pending_ack >= ack_threshold then begin
+      st.emit { typ = Window_update; flags = 0; stream_id = st.id; length = st.pending_ack; data = "" };
+      st.pending_ack <- 0
+    end;
     n
   end
   else
@@ -211,13 +226,9 @@ let handle session f =
             st.send_window <- st.send_window + f.length);
         Eio.Condition.broadcast st.win_cond
       | Data ->
-        if String.length f.data > 0 then begin
-          Eio.Stream.add st.incoming (Some f.data);
-          (* immediate window replenish *)
-          emit session
-            { typ = Window_update; flags = 0; stream_id = st.id;
-              length = String.length f.data; data = "" }
-        end
+        (* Just queue the data; the window is replenished on consumption (see
+           [stream_single_read]), which is what gives us real flow control. *)
+        if String.length f.data > 0 then Eio.Stream.add st.incoming (Some f.data)
       | _ -> ());
       if f.flags land f_fin <> 0 then Eio.Stream.add st.incoming None;
       if f.flags land f_rst <> 0 then begin

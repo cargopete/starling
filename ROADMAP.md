@@ -59,9 +59,9 @@ Sitting 2 — the live handshake ✅ (done):
       and the **full stack** (Noise → Secure_flow → `/yamux` negotiation → stream
       round-trip over a socket pair)
 - [x] `starling dial` now runs Noise → `/yamux` and brings the muxer up
-- [ ] _Manual milestone:_ open a stream against a real go-libp2p node, observe the
-      ACK (needs Go). _Simplification to revisit: read-side replenishes immediately
-      (no backpressure); fine for the MVP._
+- [x] _Manual milestone:_ open a stream against a real go-libp2p node, observe the
+      ACK — done via the [`interop/`](interop/README.md) harness. (The read-side
+      "replenish on arrival" simplification is now resolved — see **Hardening**.)
 
 ## Phase 4 — ping + Identify = MVP ✅ (done)
 
@@ -95,8 +95,11 @@ Sitting 2 — the live handshake ✅ (done):
       a fiber + fd. `listen` caps concurrency at `max_connections:256`.
 - [ ] **Idle timeout** — reap an established connection that goes silent
       (needs per-connection last-activity tracking; pairs with keep-alive below).
-- [ ] **Yamux backpressure** — replace immediate window replenish with real
-      flow control (the MVP read side replenishes on receipt).
+- [x] **Yamux backpressure** — the receive window is now replenished on
+      *consumption* (`stream_single_read`), not on arrival, so a slow reader
+      throttles the sender instead of letting `incoming` grow unbounded.
+      WindowUpdates batch at half the window; tested with a 1 MB cross-window
+      transfer and an unread-writer stall.
 - [ ] **Liveness** — periodic keep-alive ping; reap dead connections.
 - [ ] **Observability + graceful shutdown** — structured logging, metrics,
       `GoAway` on close; stop swallowing every exception with `with _ -> ()`.

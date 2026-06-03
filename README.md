@@ -18,7 +18,7 @@ for the full wire-format spec.
 
 ## Status
 
-**MVP complete + go-libp2p interop proven** — Phases 0–4, **31 tests green**.
+**MVP complete + go-libp2p interop proven** — Phases 0–4, **35 tests green**.
 `starling` is a working libp2p node: it holds a real conversation over TCP with
 mutual Peer-ID authentication, a **ping (~0.3 ms RTT)**, and an Identify exchange —
 both starling↔starling *and* against a real **go-libp2p** node, in both directions
@@ -34,7 +34,7 @@ built to spec and now confirmed on the wire against the reference implementation
 opam switch create . ocaml-base-compiler.5.2.0   # local switch (first time)
 opam install --deps-only .
 dune build
-dune runtest                                      # 31 tests, all green
+dune runtest                                      # 35 tests, all green
 ```
 
 Run two nodes and have them talk:
@@ -51,6 +51,10 @@ dune exec starling -- dial /ip4/127.0.0.1/tcp/4001
 #   ping: 1.654 ms
 #   identify: agent=starling/0.1.0 protocols=[/ipfs/ping/1.0.0, /ipfs/id/1.0.0]
 ```
+
+Both `listen` and `dial` use a **persistent host identity**: the Ed25519 seed is
+loaded from `$STARLING_IDENTITY` (default `~/.starling/identity.key`, mode `0600`),
+or minted and saved on first run — so a node keeps the same Peer ID across restarts.
 
 Other subcommands:
 

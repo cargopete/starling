@@ -28,7 +28,7 @@ let dial addr =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let clock = Eio.Stdenv.clock env in
-  let identity = Keys.generate () in
+  let identity = Identity_store.(load_or_create (default_path ())) in
   Printf.printf "local peer: %s\n%!" (Peer_id.to_string (Keys.peer_id identity));
   let ma = Multiaddr.of_string addr in
   let flow = Transport.connect ~sw ~net:(Eio.Stdenv.net env) ma in
@@ -52,7 +52,7 @@ let listen port =
   Mirage_crypto_rng_unix.use_default ();
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let identity = Keys.generate () in
+  let identity = Identity_store.(load_or_create (default_path ())) in
   let net = Eio.Stdenv.net env in
   let socket =
     Eio.Net.listen ~sw ~reuse_addr:true ~backlog:8 net

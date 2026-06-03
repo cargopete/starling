@@ -81,6 +81,24 @@ Sitting 2 — the live handshake ✅ (done):
       because both ends skipped it symmetrically) — go-libp2p requires it.
 - [ ] rust/nim interop — same harness, other implementations.
 
+## Hardening — towards production — _in progress_
+
+- [x] **Connection-failure isolation** — a peer reset / transport fault tears down
+      only that connection (per-connection switches via `Eio.Net.run_server`; the
+      Yamux read loop closes the muxer and wakes blocked readers + `accept_stream`
+      instead of propagating). One peer can no longer fell the node.
+- [x] **Persistent host identity** — `Identity_store`: stable Peer ID across
+      restarts, seed at `$STARLING_IDENTITY` / `~/.starling/identity.key`, `0600`.
+- [ ] **Timeouts / DoS limits** — handshake + idle timeouts, `max_connections`
+      cap, per-stream read bounds. (A stalled peer currently holds a fiber.)
+- [ ] **Yamux backpressure** — replace immediate window replenish with real
+      flow control (the MVP read side replenishes on receipt).
+- [ ] **Liveness** — periodic keep-alive ping; reap dead connections.
+- [ ] **Observability + graceful shutdown** — structured logging, metrics,
+      `GoAway` on close; stop swallowing every exception with `with _ -> ()`.
+- [ ] **Crypto assurance** — pin a published Noise XX test vector; constant-time
+      / zeroize review of the hand-rolled handshake.
+
 ## Growth (post-MVP)
 
 - [ ] Identify push + signed peer records + early muxer negotiation

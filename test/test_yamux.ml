@@ -108,6 +108,29 @@ let backpressure_throttles_unread_writer () =
       Alcotest.(check int) "all bytes delivered once draining" size (String.length got));
   Alcotest.(check bool) "writer completed after the reader drained" true !wrote_all
 
+(* Keep-alive reaps a peer that completes the muxer then goes silent. We wire a
+   muxer to a black-hole socket that never answers our Ping(SYN); after the
+   keep-alive timeout the muxer is reaped and [accept_stream] raises End_of_file
+   instead of blocking forever. *)
+let keepalive_reaps_dead_peer () =
+  Eio_main.run @@ fun env ->
+  let clock = Eio.Stdenv.clock env in
+  Eio.Switch.run @@ fun sw ->
+  let a, b = Eio_unix.Net.socketpair_stream ~sw () in
+  ignore b;  (* never read from / answer on b: a silent, still-connected peer *)
+  Eio.Buf_write.with_flow a @@ fun wa ->
+  let ra = Eio.Buf_read.of_flow a ~max_size:65536 in
+  let ka = Yamux.{ sleep = Eio.Time.sleep clock; interval = 0.05; timeout = 0.05 } in
+  let m = Yamux.create ~sw ~keepalive:ka ~is_client:true ra wa in
+  Eio.Fiber.first
+    (fun () ->
+      Eio.Time.sleep clock 5.0;
+      Alcotest.fail "keep-alive did not reap the silent peer within 5s")
+    (fun () ->
+      match Yamux.accept_stream m with
+      | exception End_of_file -> ()  (* reaped, as expected *)
+      | _ -> Alcotest.fail "unexpected stream from a black-hole peer")
+
 (* ----------------------- the whole stack: Noise -> Secure_flow -> Yamux ---- *)
 
 let full_stack () =
@@ -173,6 +196,7 @@ let () =
           Alcotest.test_case "large payload" `Quick large_payload;
           Alcotest.test_case "backpressure throttles unread writer" `Quick
             backpressure_throttles_unread_writer;
+          Alcotest.test_case "keep-alive reaps dead peer" `Quick keepalive_reaps_dead_peer;
         ] );
       ("integration", [ Alcotest.test_case "noise + secure_flow + yamux" `Quick full_stack ]);
     ]

@@ -93,14 +93,15 @@ Sitting 2 — the live handshake ✅ (done):
       runs under a disarm-able deadline (`Eio.Fiber.first` races the work against
       a sleeper; default 15 s), so a peer that connects and stalls no longer pins
       a fiber + fd. `listen` caps concurrency at `max_connections:256`.
-- [ ] **Idle timeout** — reap an established connection that goes silent
-      (needs per-connection last-activity tracking; pairs with keep-alive below).
+- [x] **Liveness — yamux keep-alive** — a per-muxer daemon pings the peer every
+      30 s and reaps the connection if no pong arrives within 15 s, so a peer
+      that completes the handshake then goes silent (crashed, partitioned, or
+      mute) can no longer pin a fiber + fd. Tested against a black-hole socket.
 - [x] **Yamux backpressure** — the receive window is now replenished on
       *consumption* (`stream_single_read`), not on arrival, so a slow reader
       throttles the sender instead of letting `incoming` grow unbounded.
       WindowUpdates batch at half the window; tested with a 1 MB cross-window
       transfer and an unread-writer stall.
-- [ ] **Liveness** — periodic keep-alive ping; reap dead connections.
 - [x] **Observability + graceful shutdown (protocol level)** — structured
       logging via `Logs` (a `starling` source; CLI level from `$STARLING_LOG`),
       yamux `GoAway` sent on a clean dialer close and logged on receipt, and

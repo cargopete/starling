@@ -6,10 +6,9 @@
     per-stream queues; each stream is itself an {!Eio.Flow.two_way}, so
     {!Multistream} and protocol handlers (ping, identify) compose over it.
 
-    Flow control: streams start with a 256 KiB window; on receiving data we
-    immediately return a window update of the same size (a deliberate MVP
-    simplification — no read-side backpressure), and we honour the peer's
-    windows when sending. *)
+    Flow control: streams start with a 256 KiB window; the window is replenished
+    as the application {e consumes} data (real read-side backpressure — a slow
+    reader throttles the sender), and we honour the peer's windows when sending. *)
 
 val protocol_id : string
 (** ["/yamux/1.0.0"] *)
@@ -20,11 +19,21 @@ type session
 (** A bidirectional stream — an Eio flow. *)
 type stream = Eio.Flow.two_way_ty Eio.Resource.t
 
-(** [create ~sw ~is_client r w] starts a session over [r]/[w] and forks the
-    read-loop as a daemon on [sw]. The connection initiator passes
-    [is_client:true] (odd stream ids); the listener [false] (even ids). *)
+(** Keep-alive configuration. [sleep] is a clock-backed delay supplied by the
+    caller (e.g. [Eio.Time.sleep clock]); [interval] is the gap between probes
+    and [timeout] how long to wait for each pong, both in seconds. *)
+type keepalive = { sleep : float -> unit; interval : float; timeout : float }
+
+(** [create ~sw ?keepalive ~is_client r w] starts a session over [r]/[w] and
+    forks the read-loop as a daemon on [sw]. The connection initiator passes
+    [is_client:true] (odd stream ids); the listener [false] (even ids).
+
+    With [?keepalive] set, a daemon periodically pings the peer and reaps the
+    connection if a pong does not arrive in time — so a peer that completes the
+    handshake then goes silent cannot pin a fiber and fd indefinitely. *)
 val create :
   sw:Eio.Switch.t ->
+  ?keepalive:keepalive ->
   is_client:bool ->
   Eio.Buf_read.t ->
   Eio.Buf_write.t ->

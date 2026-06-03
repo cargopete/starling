@@ -30,7 +30,7 @@ let with_deadline ~clock seconds (f : unit -> ('a, error) result) : ('a, error) 
       Error `Handshake_timeout)
     f
 
-let outbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
+let outbound ~sw ~clock ?(timeout = default_timeout) ?keepalive ~identity flow k =
   Eio.Buf_write.with_flow flow @@ fun w ->
   let r = Eio.Buf_read.of_flow flow ~max_size in
   let secure () =
@@ -55,12 +55,12 @@ let outbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
     match with_deadline ~clock timeout muxer with
     | Error _ as e -> e
     | Ok () ->
-      let y = Yamux.create ~sw ~is_client:true r2 w2 in
+      let y = Yamux.create ~sw ?keepalive ~is_client:true r2 w2 in
       let result = k ~peer:session.remote_peer y in
       Yamux.shutdown y;  (* politely GoAway now that our work is done *)
       Ok result)
 
-let inbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
+let inbound ~sw ~clock ?(timeout = default_timeout) ?keepalive ~identity flow k =
   Eio.Buf_write.with_flow flow @@ fun w ->
   let r = Eio.Buf_read.of_flow flow ~max_size in
   let secure () =
@@ -85,5 +85,5 @@ let inbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
     match with_deadline ~clock timeout muxer with
     | Error _ as e -> e
     | Ok () ->
-      let y = Yamux.create ~sw ~is_client:false r2 w2 in
+      let y = Yamux.create ~sw ?keepalive ~is_client:false r2 w2 in
       Ok (k ~peer:session.remote_peer y))

@@ -99,12 +99,13 @@ let listen port =
      socket when the handler returns; [on_error] keeps per-connection faults
      from felling the listener, and [max_connections] caps the fiber/fd
      footprint a flood of dials can demand. *)
+  let keepalive = Yamux.{ sleep = Eio.Time.sleep clock; interval = 30.; timeout = 15. } in
   Eio.Net.run_server socket ~max_connections:256
     ~on_error:report_conn_error
     (fun flow _addr ->
       Eio.Switch.run @@ fun csw ->
       ignore
-        (Upgrade.inbound ~sw:csw ~clock ~identity flow (fun ~peer y ->
+        (Upgrade.inbound ~sw:csw ~clock ~keepalive ~identity flow (fun ~peer y ->
              Log.info (fun m -> m "peer connected: %s" (Peer_id.to_string peer));
              Host.serve ~sw:csw ~identity y)))
 

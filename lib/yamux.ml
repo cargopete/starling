@@ -7,6 +7,11 @@ let max_frame_data = 16384
    enough not to flood the wire with tiny WindowUpdates. *)
 let ack_threshold = window_initial / 2
 
+(* Keep-alive configuration. [sleep] is the caller's clock-backed delay (so the
+   muxer needn't spell Eio's clock type); [interval] between probes and the
+   [timeout] to wait for each pong, in seconds. *)
+type keepalive = { sleep : float -> unit; interval : float; timeout : float }
+
 (* Flags *)
 let f_syn = 0x1
 let f_ack = 0x2
@@ -93,6 +98,7 @@ type session = {
   is_client : bool;
   mutable next_id : int;
   mutable closed : bool;  (* set once the read loop sees EOF / a transport error *)
+  mutable pong_pending : bool;  (* a keep-alive Ping(SYN) is awaiting its ACK *)
   streams : (int, st) Hashtbl.t;
   accept_q : st option Eio.Stream.t;  (* None marks the muxer closed *)
   write_mutex : Eio.Mutex.t;
@@ -200,7 +206,11 @@ let handle session f =
   match f.typ with
   | Ping ->
     if f.flags land f_syn <> 0 then
+      (* peer's keep-alive probe: echo it back *)
       emit session { typ = Ping; flags = f_ack; stream_id = 0; length = f.length; data = "" }
+    else
+      (* ACK for our own keep-alive probe: the peer is alive *)
+      session.pong_pending <- false
   | Go_away -> Log.debug (fun m -> m "yamux: peer sent GoAway (code %d)" f.length)
   | Window_update | Data ->
     let st =
@@ -236,18 +246,18 @@ let handle session f =
         Hashtbl.remove session.streams st.id
       end)
 
+(* Tear the muxer down once: signal EOF to every open stream and wake any fiber
+   blocked in [accept_stream]. Idempotent via [session.closed]. *)
+let close_session session =
+  if not session.closed then begin
+    session.closed <- true;
+    Log.debug (fun m -> m "yamux: muxer closed, signalling EOF to %d stream(s)"
+                          (Hashtbl.length session.streams));
+    Hashtbl.iter (fun _ st -> Eio.Stream.add st.incoming None) session.streams;
+    Eio.Stream.add session.accept_q None
+  end
+
 let read_loop session () =
-  (* Tear the muxer down once: signal EOF to every open stream and wake any
-     fiber blocked in [accept_stream]. Idempotent via [session.closed]. *)
-  let close () =
-    if not session.closed then begin
-      session.closed <- true;
-      Log.debug (fun m -> m "yamux: muxer closed, signalling EOF to %d stream(s)"
-                            (Hashtbl.length session.streams));
-      Hashtbl.iter (fun _ st -> Eio.Stream.add st.incoming None) session.streams;
-      Eio.Stream.add session.accept_q None
-    end
-  in
   let rec loop () =
     match read_frame session.r with
     | f -> handle session f; loop ()
@@ -258,10 +268,33 @@ let read_loop session () =
     | exception _ -> ()
   in
   (try loop () with _ -> ());
-  close ();
+  close_session session;
   `Stop_daemon
 
-let create ~sw ~is_client r w =
+(* Keep-alive: every [interval] send a Ping(SYN); if the peer has not answered
+   with a Ping(ACK) within [timeout], it is dead (crashed, partitioned, or
+   simply mute) — reap the connection so it stops pinning a fiber and an fd. *)
+let keepalive_loop session { sleep; interval; timeout } () =
+  let rec loop () =
+    sleep interval;
+    if session.closed then `Stop_daemon
+    else begin
+      session.pong_pending <- true;
+      (try emit session { typ = Ping; flags = f_syn; stream_id = 0; length = 0; data = "" }
+       with _ -> ());
+      sleep timeout;
+      if session.closed then `Stop_daemon
+      else if session.pong_pending then begin
+        Log.warn (fun m -> m "yamux: keep-alive timed out, reaping connection");
+        close_session session;
+        `Stop_daemon
+      end
+      else loop ()
+    end
+  in
+  loop ()
+
+let create ~sw ?keepalive ~is_client r w =
   let session =
     {
       r;
@@ -269,6 +302,7 @@ let create ~sw ~is_client r w =
       is_client;
       next_id = (if is_client then 1 else 2);
       closed = false;
+      pong_pending = false;
       streams = Hashtbl.create 16;
       accept_q = Eio.Stream.create 64;
       write_mutex = Eio.Mutex.create ();
@@ -276,6 +310,7 @@ let create ~sw ~is_client r w =
     }
   in
   Eio.Fiber.fork_daemon ~sw (read_loop session);
+  Option.iter (fun ka -> Eio.Fiber.fork_daemon ~sw (keepalive_loop session ka)) keepalive;
   session
 
 let open_stream session =

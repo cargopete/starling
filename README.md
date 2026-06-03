@@ -55,6 +55,8 @@ dune exec starling -- dial /ip4/127.0.0.1/tcp/4001
 Both `listen` and `dial` use a **persistent host identity**: the Ed25519 seed is
 loaded from `$STARLING_IDENTITY` (default `~/.starling/identity.key`, mode `0600`),
 or minted and saved on first run — so a node keeps the same Peer ID across restarts.
+Set `$STARLING_LOG` (`debug` | `info` | `warning` | `error` | `quiet`, default
+`info`) to control the node's structured log output.
 
 Other subcommands:
 
@@ -96,11 +98,11 @@ test/   Alcotest suites, anchored on external vectors per layer
 
 go-libp2p interop is done. **Production hardening** is underway — connection-failure
 isolation, persistent host identity, handshake timeouts + a connection cap, real
-Yamux backpressure, and a clean constant-time review ([`SECURITY.md`](SECURITY.md))
-are in; idle-timeout/keep-alive, observability + graceful shutdown, and secret
-zeroization (a documented runtime limitation) remain. After that: rust/nim interop,
-then growth protocols — Identify push, Kademlia DHT (`/ipfs/kad`), GossipSub
-(`/meshsub`). See [`ROADMAP.md`](ROADMAP.md).
+Yamux backpressure, a clean constant-time review ([`SECURITY.md`](SECURITY.md)), and
+structured logging + yamux `GoAway` graceful close are in; idle-timeout/keep-alive,
+metrics + signal-driven shutdown, and secret zeroization (a documented runtime
+limitation) remain. After that: rust/nim interop, then growth protocols — Identify
+push, Kademlia DHT (`/ipfs/kad`), GossipSub (`/meshsub`). See [`ROADMAP.md`](ROADMAP.md).
 
 ## License
 

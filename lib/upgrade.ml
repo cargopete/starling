@@ -56,7 +56,9 @@ let outbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
     | Error _ as e -> e
     | Ok () ->
       let y = Yamux.create ~sw ~is_client:true r2 w2 in
-      Ok (k ~peer:session.remote_peer y))
+      let result = k ~peer:session.remote_peer y in
+      Yamux.shutdown y;  (* politely GoAway now that our work is done *)
+      Ok result)
 
 let inbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
   Eio.Buf_write.with_flow flow @@ fun w ->

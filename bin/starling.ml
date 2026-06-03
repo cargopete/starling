@@ -8,6 +8,39 @@
 
 open Starling
 
+(* Install a Logs reporter for the node's operational output. Level comes from
+   [$STARLING_LOG] (debug | info | warning | error | quiet), default info.
+   The dial command's results stay on stdout — they are the command's answer,
+   not log lines. *)
+let setup_log () =
+  Fmt_tty.setup_std_outputs ();
+  Logs.set_reporter (Logs_fmt.reporter ());
+  let level =
+    match Sys.getenv_opt "STARLING_LOG" with
+    | Some "debug" -> Some Logs.Debug
+    | Some ("warn" | "warning") -> Some Logs.Warning
+    | Some "error" -> Some Logs.Error
+    | Some "quiet" -> None
+    | _ -> Some Logs.Info
+  in
+  Logs.set_level level
+
+(* A peer hanging up — reset, broken pipe, EOF, an aborted final flush — is a
+   normal event, not a fault; log it calmly so genuine errors still stand out. *)
+let contains_sub ~needle haystack =
+  let nl = String.length needle and hl = String.length haystack in
+  let rec go i = i + nl <= hl && (String.sub haystack i nl = needle || go (i + 1)) in
+  nl = 0 || go 0
+
+let report_conn_error exn =
+  let s = Printexc.to_string exn in
+  let benign m = contains_sub ~needle:m s in
+  if
+    benign "Connection reset" || benign "Connection_reset" || benign "Broken pipe"
+    || benign "Flush_aborted" || benign "End_of_file"
+  then Log.info (fun m -> m "peer disconnected")
+  else Log.warn (fun m -> m "connection error: %s" s)
+
 let default_seed = String.make 32 '\001'
 
 let print_id seed =
@@ -59,20 +92,20 @@ let listen port =
     Eio.Net.listen ~sw ~reuse_addr:true ~backlog:8 net
       (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))
   in
-  Printf.printf "starling listening on /ip4/127.0.0.1/tcp/%d/p2p/%s\n%!" port
-    (Peer_id.to_string (Keys.peer_id identity));
+  Log.app (fun m ->
+      m "listening on /ip4/127.0.0.1/tcp/%d/p2p/%s" port
+        (Peer_id.to_string (Keys.peer_id identity)));
   (* [run_server] forks each connection into its own switch and closes the
-     socket when the handler returns; [on_error] swallows per-connection faults
-     so one peer can never fell the listener, and [max_connections] caps the
-     fiber/fd footprint a flood of dials can demand. *)
+     socket when the handler returns; [on_error] keeps per-connection faults
+     from felling the listener, and [max_connections] caps the fiber/fd
+     footprint a flood of dials can demand. *)
   Eio.Net.run_server socket ~max_connections:256
-    ~on_error:(fun exn ->
-      Printf.eprintf "connection error: %s\n%!" (Printexc.to_string exn))
+    ~on_error:report_conn_error
     (fun flow _addr ->
       Eio.Switch.run @@ fun csw ->
       ignore
         (Upgrade.inbound ~sw:csw ~clock ~identity flow (fun ~peer y ->
-             Printf.printf "peer connected: %s\n%!" (Peer_id.to_string peer);
+             Log.info (fun m -> m "peer connected: %s" (Peer_id.to_string peer));
              Host.serve ~sw:csw ~identity y)))
 
 let usage () =
@@ -80,6 +113,7 @@ let usage () =
   exit 2
 
 let () =
+  setup_log ();
   match Sys.argv with
   | [| _ |] -> print_id default_seed
   | [| _; "id" |] -> print_id default_seed

@@ -201,7 +201,7 @@ let handle session f =
   | Ping ->
     if f.flags land f_syn <> 0 then
       emit session { typ = Ping; flags = f_ack; stream_id = 0; length = f.length; data = "" }
-  | Go_away -> ()
+  | Go_away -> Log.debug (fun m -> m "yamux: peer sent GoAway (code %d)" f.length)
   | Window_update | Data ->
     let st =
       match Hashtbl.find_opt session.streams f.stream_id with
@@ -242,6 +242,8 @@ let read_loop session () =
   let close () =
     if not session.closed then begin
       session.closed <- true;
+      Log.debug (fun m -> m "yamux: muxer closed, signalling EOF to %d stream(s)"
+                            (Hashtbl.length session.streams));
       Hashtbl.iter (fun _ st -> Eio.Stream.add st.incoming None) session.streams;
       Eio.Stream.add session.accept_q None
     end
@@ -296,3 +298,10 @@ let accept_stream session =
     Eio.Stream.add session.accept_q None;  (* re-arm so concurrent acceptors also see EOF *)
     raise End_of_file
   | Some st -> to_flow st
+
+(* Politely tell the peer we are done (yamux GoAway, normal code 0) before the
+   connection is torn down. Best-effort: the socket may already be gone. *)
+let shutdown session =
+  if not session.closed then
+    try emit session { typ = Go_away; flags = 0; stream_id = 0; length = 0; data = "" }
+    with _ -> ()

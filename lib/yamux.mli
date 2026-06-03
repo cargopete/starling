@@ -38,6 +38,10 @@ val open_stream : session -> stream
     transport fault), so accept loops terminate rather than block forever. *)
 val accept_stream : session -> stream
 
+(** Send a yamux GoAway (normal, code 0) to tell the peer we are closing down.
+    Best-effort — does nothing if the muxer is already closed. *)
+val shutdown : session -> unit
+
 (** {2 Frame codec — exposed for testing} *)
 
 type frame_type =

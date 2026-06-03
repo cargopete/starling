@@ -33,7 +33,9 @@ val create :
 (** Open a new outbound stream (sends SYN). *)
 val open_stream : session -> stream
 
-(** Accept the next inbound stream (blocks until a peer opens one). *)
+(** Accept the next inbound stream (blocks until a peer opens one).
+    Raises [End_of_file] once the muxer has closed (peer disconnect or
+    transport fault), so accept loops terminate rather than block forever. *)
 val accept_stream : session -> stream
 
 (** {2 Frame codec — exposed for testing} *)

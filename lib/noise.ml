@@ -13,6 +13,7 @@ type error =
   | `Bad_signature
   ]
 
+let protocol_id = "/noise"
 let sig_prefix = "noise-libp2p-static-key:"
 
 let make_payload ~identity ~static =

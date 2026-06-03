@@ -31,10 +31,12 @@ let handle_stream ~identity stream =
    connection's switch from tearing down. *)
 let serve ~sw ~identity y =
   let rec loop () =
-    let stream = Yamux.accept_stream y in
-    Eio.Fiber.fork_daemon ~sw (fun () ->
-        (try handle_stream ~identity stream with End_of_file | Failure _ -> ());
-        `Stop_daemon);
-    loop ()
+    match Yamux.accept_stream y with
+    | exception End_of_file -> ()  (* muxer closed: stop serving this peer *)
+    | stream ->
+      Eio.Fiber.fork_daemon ~sw (fun () ->
+          (try handle_stream ~identity stream with End_of_file | Failure _ -> ());
+          `Stop_daemon);
+      loop ()
   in
   loop ()

@@ -3,3 +3,4 @@ _opam/
 *.install
 *.merlin
 .DS_Store
+interop/starling-interop

@@ -9,6 +9,7 @@ type error =
   [ `Handshake_failed
   | `Bad_payload
   | `Bad_signature
+  | `Noise_negotiation
   | `Yamux_negotiation
   ]
 
@@ -17,6 +18,9 @@ let max_size = 1 lsl 20
 let outbound ~sw ~identity flow k =
   Eio.Buf_write.with_flow flow @@ fun w ->
   let r = Eio.Buf_read.of_flow flow ~max_size in
+  match Multistream.dial r w ~proto:Noise.protocol_id with
+  | Error _ -> Error `Noise_negotiation
+  | Ok () ->
   match Noise.run_initiator ~identity r w with
   | Error e -> Error (e :> error)
   | Ok session -> (
@@ -32,6 +36,9 @@ let outbound ~sw ~identity flow k =
 let inbound ~sw ~identity flow k =
   Eio.Buf_write.with_flow flow @@ fun w ->
   let r = Eio.Buf_read.of_flow flow ~max_size in
+  match Multistream.listen r w ~supported:[ Noise.protocol_id ] with
+  | Error _ -> Error `Noise_negotiation
+  | Ok _ ->
   match Noise.run_responder ~identity r w with
   | Error e -> Error (e :> error)
   | Ok session -> (

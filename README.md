@@ -18,14 +18,15 @@ for the full wire-format spec.
 
 ## Status
 
-**MVP complete** — Phases 0–4, **31 tests green**. `starling` is a working libp2p
-node: two instances hold a real conversation over TCP, with mutual Peer-ID
-authentication, a **ping (~1.6 ms RTT)**, and an Identify exchange.
+**MVP complete + go-libp2p interop proven** — Phases 0–4, **31 tests green**.
+`starling` is a working libp2p node: it holds a real conversation over TCP with
+mutual Peer-ID authentication, a **ping (~0.3 ms RTT)**, and an Identify exchange —
+both starling↔starling *and* against a real **go-libp2p** node, in both directions
+(see [`interop/`](interop/README.md)).
 
 The MVP stack is `TCP → multistream-select 1.0.0 → Noise XX → Yamux → ping + Identify`
-(no TLS, mplex, or QUIC — those are deliberately out of scope). The one remaining
-"definition of done" is external interop against a real go-libp2p node, which only
-needs a Go toolchain to stand one up; every wire format is built to spec.
+(no TLS, mplex, or QUIC — those are deliberately out of scope). Every wire format is
+built to spec and now confirmed on the wire against the reference implementation.
 
 ## Try it
 
@@ -89,9 +90,8 @@ test/   Alcotest suites, anchored on external vectors per layer
 
 ## What's next
 
-External interop against go-libp2p (then rust/nim), then growth protocols —
-Identify push, Kademlia DHT (`/ipfs/kad`), GossipSub (`/meshsub`). See
-[`ROADMAP.md`](ROADMAP.md).
+go-libp2p interop is done; rust/nim next, then growth protocols — Identify push,
+Kademlia DHT (`/ipfs/kad`), GossipSub (`/meshsub`). See [`ROADMAP.md`](ROADMAP.md).
 
 ## License
 

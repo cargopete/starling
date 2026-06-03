@@ -86,8 +86,9 @@ type session = {
   w : Eio.Buf_write.t;
   is_client : bool;
   mutable next_id : int;
+  mutable closed : bool;  (* set once the read loop sees EOF / a transport error *)
   streams : (int, st) Hashtbl.t;
-  accept_q : st Eio.Stream.t;
+  accept_q : st option Eio.Stream.t;  (* None marks the muxer closed *)
   write_mutex : Eio.Mutex.t;
   id_mutex : Eio.Mutex.t;
 }
@@ -196,7 +197,7 @@ let handle session f =
           Hashtbl.replace session.streams f.stream_id st;
           emit session
             { typ = Window_update; flags = f_ack; stream_id = f.stream_id; length = 0; data = "" };
-          Eio.Stream.add session.accept_q st;
+          Eio.Stream.add session.accept_q (Some st);
           Some st
         end
         else None
@@ -225,17 +226,27 @@ let handle session f =
       end)
 
 let read_loop session () =
+  (* Tear the muxer down once: signal EOF to every open stream and wake any
+     fiber blocked in [accept_stream]. Idempotent via [session.closed]. *)
+  let close () =
+    if not session.closed then begin
+      session.closed <- true;
+      Hashtbl.iter (fun _ st -> Eio.Stream.add st.incoming None) session.streams;
+      Eio.Stream.add session.accept_q None
+    end
+  in
   let rec loop () =
     match read_frame session.r with
-    | exception End_of_file ->
-      (* signal EOF to every open stream *)
-      Hashtbl.iter (fun _ st -> Eio.Stream.add st.incoming None) session.streams;
-      `Stop_daemon
-    | f ->
-      handle session f;
-      loop ()
+    | f -> handle session f; loop ()
+    (* End_of_file is a clean peer close; any other exception is a transport
+       fault (connection reset, write failure during replenish, ...). Either
+       way this one connection is finished — never let it escape and fell the
+       whole node. *)
+    | exception _ -> ()
   in
-  loop ()
+  (try loop () with _ -> ());
+  close ();
+  `Stop_daemon
 
 let create ~sw ~is_client r w =
   let session =
@@ -244,6 +255,7 @@ let create ~sw ~is_client r w =
       w;
       is_client;
       next_id = (if is_client then 1 else 2);
+      closed = false;
       streams = Hashtbl.create 16;
       accept_q = Eio.Stream.create 64;
       write_mutex = Eio.Mutex.create ();
@@ -265,4 +277,11 @@ let open_stream session =
   emit session { typ = Data; flags = f_syn; stream_id = id; length = 0; data = "" };
   to_flow st
 
-let accept_stream session = to_flow (Eio.Stream.take session.accept_q)
+(* Blocks for the next inbound stream. Raises [End_of_file] once the muxer has
+   closed, so server accept loops terminate instead of hanging forever. *)
+let accept_stream session =
+  match Eio.Stream.take session.accept_q with
+  | None ->
+    Eio.Stream.add session.accept_q None;  (* re-arm so concurrent acceptors also see EOF *)
+    raise End_of_file
+  | Some st -> to_flow st

@@ -60,19 +60,18 @@ let listen port =
   in
   Printf.printf "starling listening on /ip4/127.0.0.1/tcp/%d/p2p/%s\n%!" port
     (Peer_id.to_string (Keys.peer_id identity));
-  let rec accept () =
-    let flow, _addr = Eio.Net.accept ~sw socket in
-    Eio.Fiber.fork_daemon ~sw (fun () ->
-        (try
-           ignore
-             (Upgrade.inbound ~sw ~identity flow (fun ~peer y ->
-                  Printf.printf "peer connected: %s\n%!" (Peer_id.to_string peer);
-                  Host.serve ~sw ~identity y))
-         with _ -> ());
-        `Stop_daemon);
-    accept ()
-  in
-  accept ()
+  (* [run_server] forks each connection into its own switch and closes the
+     socket when the handler returns; [on_error] swallows per-connection faults
+     so one peer can never fell the listener. *)
+  Eio.Net.run_server socket
+    ~on_error:(fun exn ->
+      Printf.eprintf "connection error: %s\n%!" (Printexc.to_string exn))
+    (fun flow _addr ->
+      Eio.Switch.run @@ fun csw ->
+      ignore
+        (Upgrade.inbound ~sw:csw ~identity flow (fun ~peer y ->
+             Printf.printf "peer connected: %s\n%!" (Peer_id.to_string peer);
+             Host.serve ~sw:csw ~identity y)))
 
 let usage () =
   prerr_endline "usage: starling [id <hex-seed> | listen <port> | dial <multiaddr>]";

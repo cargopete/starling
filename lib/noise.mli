@@ -16,6 +16,9 @@ type error =
   | `Bad_signature
   ]
 
+(** The multistream-select protocol id for the Noise security transport: ["/noise"]. *)
+val protocol_id : string
+
 (** The string signed by the identity key over the Noise static public key. *)
 val sig_prefix : string
 

@@ -73,9 +73,13 @@ Sitting 2 — the live handshake ✅ (done):
       (upgrade, ping with RTT, fetch identify)
 - [x] Proven **starling ↔ starling** over real TCP: mutual auth, `ping ~1.6 ms`,
       identify exchange. MVP test green in CI.
-- [ ] **Remaining definition-of-done:** dial a real go-libp2p (then rust/nim) ping
-      node — needs Go/Rust toolchains installed. The wire is to spec; this is the
-      external interop confirmation.
+- [x] **Definition-of-done — go-libp2p interop, both directions** (see
+      [`interop/`](interop/README.md)). starling dials go-libp2p (Noise XX +
+      mutual auth, `/yamux`, ping ~0.3 ms, reads go's identify); go-libp2p dials
+      starling (ping ~0.3 ms). This surfaced and fixed a real gap: the upgrade
+      skipped the multistream-select `/noise` step (starling↔starling worked only
+      because both ends skipped it symmetrically) — go-libp2p requires it.
+- [ ] rust/nim interop — same harness, other implementations.
 
 ## Growth (post-MVP)
 

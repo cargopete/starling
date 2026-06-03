@@ -92,6 +92,8 @@ func main() {
 			os.Exit(2)
 		}
 		runDial(os.Args[2])
+	case "noisekat":
+		runNoiseKAT()
 	default:
 		fmt.Println("unknown subcommand")
 		os.Exit(2)

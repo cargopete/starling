@@ -18,7 +18,7 @@ for the full wire-format spec.
 
 ## Status
 
-**MVP complete + go-libp2p interop proven** — Phases 0–4, **37 tests green**.
+**MVP complete + go-libp2p interop proven** — Phases 0–4, **38 tests green**.
 `starling` is a working libp2p node: it holds a real conversation over TCP with
 mutual Peer-ID authentication, a **ping (~0.3 ms RTT)**, and an Identify exchange —
 both starling↔starling *and* against a real **go-libp2p** node, in both directions
@@ -34,7 +34,7 @@ built to spec and now confirmed on the wire against the reference implementation
 opam switch create . ocaml-base-compiler.5.2.0   # local switch (first time)
 opam install --deps-only .
 dune build
-dune runtest                                      # 37 tests, all green
+dune runtest                                      # 38 tests, all green
 ```
 
 Run two nodes and have them talk:
@@ -73,9 +73,9 @@ Each layer is hand-rolled and tested, with external vectors where it counts.
 | Identity | `Keys`, `Peer_id` | Ed25519 → `PublicKey` protobuf → identity multihash → base58btc (`12D3Koo…`) |
 | Transport | `Transport` | Eio TCP dial (multiaddr → socket) |
 | Negotiation | `Multistream` | multistream-select 1.0.0 |
-| Security | `Noise_*`, `Noise` | hand-rolled `Noise_XX_25519_ChaChaPoly_SHA256`; AEAD verified vs **RFC 8439**; mutual Peer-ID auth |
+| Security | `Noise_*`, `Noise` | hand-rolled `Noise_XX_25519_ChaChaPoly_SHA256`; AEAD verified vs **RFC 8439**, full handshake pinned to a **flynn/noise** cross-impl vector; mutual Peer-ID auth |
 | Encrypted channel | `Secure_flow` | the Noise transport as a custom `Eio.Flow.two_way` — every higher layer composes over it |
-| Multiplexing | `Yamux` | 12-byte frames, SYN/ACK/FIN/RST, 256 KiB window, daemon read-loop; **streams are Eio flows** |
+| Multiplexing | `Yamux` | 12-byte frames, SYN/ACK/FIN/RST, 256 KiB window with **consumption-driven backpressure**, daemon read-loop; **streams are Eio flows** |
 | Upgrade & dispatch | `Upgrade`, `Host` | TCP → Noise → `/yamux`; per-stream protocol routing |
 | Protocols | `Ping`, `Identify` | `/ipfs/ping/1.0.0` (32-byte echo + RTT), `/ipfs/id/1.0.0` |
 
@@ -94,8 +94,12 @@ test/   Alcotest suites, anchored on external vectors per layer
 
 ## What's next
 
-go-libp2p interop is done; rust/nim next, then growth protocols — Identify push,
-Kademlia DHT (`/ipfs/kad`), GossipSub (`/meshsub`). See [`ROADMAP.md`](ROADMAP.md).
+go-libp2p interop is done. **Production hardening** is underway — connection-failure
+isolation, persistent host identity, handshake timeouts + a connection cap, and real
+Yamux backpressure are in; idle-timeout/keep-alive, observability + graceful shutdown,
+and a constant-time/zeroize crypto pass remain. After that: rust/nim interop, then
+growth protocols — Identify push, Kademlia DHT (`/ipfs/kad`), GossipSub (`/meshsub`).
+See [`ROADMAP.md`](ROADMAP.md).
 
 ## License
 

@@ -25,7 +25,7 @@ let mvp_over_tcp () =
   Eio.Fiber.fork_daemon ~sw (fun () ->
       let flow, _addr = Eio.Net.accept ~sw listening in
       ignore
-        (Upgrade.inbound ~sw ~identity:server_id flow (fun ~peer y ->
+        (Upgrade.inbound ~sw ~clock ~identity:server_id flow (fun ~peer y ->
              seen_peer := Peer_id.to_string peer;
              Host.serve ~sw ~identity:server_id y));
       `Stop_daemon);
@@ -33,7 +33,7 @@ let mvp_over_tcp () =
   let ma = Multiaddr.of_string (Printf.sprintf "/ip4/127.0.0.1/tcp/%d" port) in
   let flow = Transport.connect ~sw ~net ma in
   ignore
-    (Upgrade.outbound ~sw ~identity:client_id flow (fun ~peer:_ y ->
+    (Upgrade.outbound ~sw ~clock ~identity:client_id flow (fun ~peer:_ y ->
          (* ping on its own stream *)
          let s = Yamux.open_stream y in
          Eio.Buf_write.with_flow s (fun w ->
@@ -58,6 +58,40 @@ let mvp_over_tcp () =
   Alcotest.(check string) "identify public key matches server peer id"
     (Peer_id.to_string (Keys.peer_id server_id)) !id_peer
 
+(* A peer that connects over TCP and then says nothing must not pin the server:
+   the handshake deadline fires and [inbound] returns [`Handshake_timeout]. *)
+let handshake_timeout_on_silent_peer () =
+  Mirage_crypto_rng_unix.use_default ();
+  Eio_main.run @@ fun env ->
+  Eio.Switch.run @@ fun sw ->
+  let net = Eio.Stdenv.net env in
+  let clock = Eio.Stdenv.clock env in
+  let server_id = Keys.of_seed (String.make 32 '\042') in
+  let listening =
+    Eio.Net.listen ~sw ~reuse_addr:true ~backlog:4 net
+      (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
+  in
+  let port = match Eio.Net.listening_addr listening with `Tcp (_, p) -> p | _ -> 0 in
+  let timed_out = ref false in
+  Eio.Fiber.both
+    (fun () ->
+      let flow, _addr = Eio.Net.accept ~sw listening in
+      match Upgrade.inbound ~sw ~clock ~timeout:0.1 ~identity:server_id flow (fun ~peer:_ _ -> ()) with
+      | Error `Handshake_timeout -> timed_out := true
+      | Error _ -> Alcotest.fail "expected a handshake timeout, got another error"
+      | Ok () -> Alcotest.fail "silent peer should not complete the handshake")
+    (fun () ->
+      (* connect, then stay mute long enough for the deadline to fire *)
+      let ma = Multiaddr.of_string (Printf.sprintf "/ip4/127.0.0.1/tcp/%d" port) in
+      let _flow = Transport.connect ~sw ~net ma in
+      Eio.Time.sleep clock 0.5);
+  Alcotest.(check bool) "inbound timed out on a silent peer" true !timed_out
+
 let () =
   Alcotest.run "mvp"
-    [ ("node", [ Alcotest.test_case "ping + identify over tcp" `Quick mvp_over_tcp ]) ]
+    [
+      ("node", [ Alcotest.test_case "ping + identify over tcp" `Quick mvp_over_tcp ]);
+      ( "limits",
+        [ Alcotest.test_case "handshake timeout on silent peer" `Quick handshake_timeout_on_silent_peer ]
+      );
+    ]

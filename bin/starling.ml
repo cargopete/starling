@@ -33,7 +33,7 @@ let dial addr =
   let ma = Multiaddr.of_string addr in
   let flow = Transport.connect ~sw ~net:(Eio.Stdenv.net env) ma in
   let result =
-    Upgrade.outbound ~sw ~identity flow (fun ~peer y ->
+    Upgrade.outbound ~sw ~clock ~identity flow (fun ~peer y ->
         Printf.printf "established session with %s\n%!" (Peer_id.to_string peer);
         with_stream y Ping.protocol_id (fun r w ->
             let rtt = Ping.ping ~clock r w in
@@ -53,6 +53,7 @@ let listen port =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let identity = Identity_store.(load_or_create (default_path ())) in
+  let clock = Eio.Stdenv.clock env in
   let net = Eio.Stdenv.net env in
   let socket =
     Eio.Net.listen ~sw ~reuse_addr:true ~backlog:8 net
@@ -62,14 +63,15 @@ let listen port =
     (Peer_id.to_string (Keys.peer_id identity));
   (* [run_server] forks each connection into its own switch and closes the
      socket when the handler returns; [on_error] swallows per-connection faults
-     so one peer can never fell the listener. *)
-  Eio.Net.run_server socket
+     so one peer can never fell the listener, and [max_connections] caps the
+     fiber/fd footprint a flood of dials can demand. *)
+  Eio.Net.run_server socket ~max_connections:256
     ~on_error:(fun exn ->
       Printf.eprintf "connection error: %s\n%!" (Printexc.to_string exn))
     (fun flow _addr ->
       Eio.Switch.run @@ fun csw ->
       ignore
-        (Upgrade.inbound ~sw:csw ~identity flow (fun ~peer y ->
+        (Upgrade.inbound ~sw:csw ~clock ~identity flow (fun ~peer y ->
              Printf.printf "peer connected: %s\n%!" (Peer_id.to_string peer);
              Host.serve ~sw:csw ~identity y)))
 

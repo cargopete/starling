@@ -89,8 +89,12 @@ Sitting 2 — the live handshake ✅ (done):
       instead of propagating). One peer can no longer fell the node.
 - [x] **Persistent host identity** — `Identity_store`: stable Peer ID across
       restarts, seed at `$STARLING_IDENTITY` / `~/.starling/identity.key`, `0600`.
-- [ ] **Timeouts / DoS limits** — handshake + idle timeouts, `max_connections`
-      cap, per-stream read bounds. (A stalled peer currently holds a fiber.)
+- [x] **Handshake timeout + connection cap** — every negotiation/handshake step
+      runs under a disarm-able deadline (`Eio.Fiber.first` races the work against
+      a sleeper; default 15 s), so a peer that connects and stalls no longer pins
+      a fiber + fd. `listen` caps concurrency at `max_connections:256`.
+- [ ] **Idle timeout** — reap an established connection that goes silent
+      (needs per-connection last-activity tracking; pairs with keep-alive below).
 - [ ] **Yamux backpressure** — replace immediate window replenish with real
       flow control (the MVP read side replenishes on receipt).
 - [ ] **Liveness** — periodic keep-alive ping; reap dead connections.

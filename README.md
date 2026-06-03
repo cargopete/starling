@@ -18,7 +18,7 @@ for the full wire-format spec.
 
 ## Status
 
-**MVP complete + go-libp2p interop proven** — Phases 0–4, **35 tests green**.
+**MVP complete + go-libp2p interop proven** — Phases 0–4, **36 tests green**.
 `starling` is a working libp2p node: it holds a real conversation over TCP with
 mutual Peer-ID authentication, a **ping (~0.3 ms RTT)**, and an Identify exchange —
 both starling↔starling *and* against a real **go-libp2p** node, in both directions
@@ -34,7 +34,7 @@ built to spec and now confirmed on the wire against the reference implementation
 opam switch create . ocaml-base-compiler.5.2.0   # local switch (first time)
 opam install --deps-only .
 dune build
-dune runtest                                      # 35 tests, all green
+dune runtest                                      # 36 tests, all green
 ```
 
 Run two nodes and have them talk:

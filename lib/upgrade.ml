@@ -11,42 +11,77 @@ type error =
   | `Bad_signature
   | `Noise_negotiation
   | `Yamux_negotiation
+  | `Handshake_timeout
   ]
 
 let max_size = 1 lsl 20
 
-let outbound ~sw ~identity flow k =
+(* A peer that connects and then stalls must not pin a fiber and a socket
+   forever, so every negotiation/handshake step runs under a deadline. *)
+let default_timeout = 15.0
+
+(* Run [f] with a deadline that is disarmed the instant [f] returns: the sleeper
+   and [f] race, and whichever finishes first cancels the other. [f] must not
+   block on the live session (that is [k]'s job, which runs unbounded after). *)
+let with_deadline ~clock seconds (f : unit -> ('a, error) result) : ('a, error) result =
+  Eio.Fiber.first
+    (fun () ->
+      Eio.Time.sleep clock seconds;
+      Error `Handshake_timeout)
+    f
+
+let outbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
   Eio.Buf_write.with_flow flow @@ fun w ->
   let r = Eio.Buf_read.of_flow flow ~max_size in
-  match Multistream.dial r w ~proto:Noise.protocol_id with
-  | Error _ -> Error `Noise_negotiation
-  | Ok () ->
-  match Noise.run_initiator ~identity r w with
-  | Error e -> Error (e :> error)
+  let secure () =
+    match Multistream.dial r w ~proto:Noise.protocol_id with
+    | Error _ -> Error `Noise_negotiation
+    | Ok () -> (
+      match Noise.run_initiator ~identity r w with
+      | Error e -> Error (e :> error)
+      | Ok session -> Ok session)
+  in
+  match with_deadline ~clock timeout secure with
+  | Error _ as e -> e
   | Ok session -> (
     let sf = Secure_flow.make r w session in
     Eio.Buf_write.with_flow sf @@ fun w2 ->
     let r2 = Eio.Buf_read.of_flow sf ~max_size in
-    match Multistream.dial r2 w2 ~proto:Yamux.protocol_id with
-    | Error _ -> Error `Yamux_negotiation
+    let muxer () =
+      match Multistream.dial r2 w2 ~proto:Yamux.protocol_id with
+      | Error _ -> Error `Yamux_negotiation
+      | Ok () -> Ok ()
+    in
+    match with_deadline ~clock timeout muxer with
+    | Error _ as e -> e
     | Ok () ->
       let y = Yamux.create ~sw ~is_client:true r2 w2 in
       Ok (k ~peer:session.remote_peer y))
 
-let inbound ~sw ~identity flow k =
+let inbound ~sw ~clock ?(timeout = default_timeout) ~identity flow k =
   Eio.Buf_write.with_flow flow @@ fun w ->
   let r = Eio.Buf_read.of_flow flow ~max_size in
-  match Multistream.listen r w ~supported:[ Noise.protocol_id ] with
-  | Error _ -> Error `Noise_negotiation
-  | Ok _ ->
-  match Noise.run_responder ~identity r w with
-  | Error e -> Error (e :> error)
+  let secure () =
+    match Multistream.listen r w ~supported:[ Noise.protocol_id ] with
+    | Error _ -> Error `Noise_negotiation
+    | Ok _ -> (
+      match Noise.run_responder ~identity r w with
+      | Error e -> Error (e :> error)
+      | Ok session -> Ok session)
+  in
+  match with_deadline ~clock timeout secure with
+  | Error _ as e -> e
   | Ok session -> (
     let sf = Secure_flow.make r w session in
     Eio.Buf_write.with_flow sf @@ fun w2 ->
     let r2 = Eio.Buf_read.of_flow sf ~max_size in
-    match Multistream.listen r2 w2 ~supported:[ Yamux.protocol_id ] with
-    | Error _ -> Error `Yamux_negotiation
-    | Ok _ ->
+    let muxer () =
+      match Multistream.listen r2 w2 ~supported:[ Yamux.protocol_id ] with
+      | Error _ -> Error `Yamux_negotiation
+      | Ok _ -> Ok ()
+    in
+    match with_deadline ~clock timeout muxer with
+    | Error _ as e -> e
+    | Ok () ->
       let y = Yamux.create ~sw ~is_client:false r2 w2 in
       Ok (k ~peer:session.remote_peer y))

@@ -95,11 +95,12 @@ test/   Alcotest suites, anchored on external vectors per layer
 ## What's next
 
 go-libp2p interop is done. **Production hardening** is underway — connection-failure
-isolation, persistent host identity, handshake timeouts + a connection cap, and real
-Yamux backpressure are in; idle-timeout/keep-alive, observability + graceful shutdown,
-and a constant-time/zeroize crypto pass remain. After that: rust/nim interop, then
-growth protocols — Identify push, Kademlia DHT (`/ipfs/kad`), GossipSub (`/meshsub`).
-See [`ROADMAP.md`](ROADMAP.md).
+isolation, persistent host identity, handshake timeouts + a connection cap, real
+Yamux backpressure, and a clean constant-time review ([`SECURITY.md`](SECURITY.md))
+are in; idle-timeout/keep-alive, observability + graceful shutdown, and secret
+zeroization (a documented runtime limitation) remain. After that: rust/nim interop,
+then growth protocols — Identify push, Kademlia DHT (`/ipfs/kad`), GossipSub
+(`/meshsub`). See [`ROADMAP.md`](ROADMAP.md).
 
 ## License
 
